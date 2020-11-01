@@ -1,26 +1,51 @@
 
+import java.security.acl.AclNotFoundException;
 import java.util.ArrayList;
 
 public class BusquedaTabu {
     private Coordenada[] coordenadas;
     private ArrayList<Integer> solucionInicial;
-    private ArrayList<Movimiento> listaTabu;
     private ArrayList<Integer> solucionActual;
+    private ArrayList<Integer> mejorSolucion;
+    private ArrayList<Movimiento> listaTabu;
     private int costeSolucionActual;
     private int[][] distancias;
+    private int[][] frecuencias;
+    private int[][] nuevasDistancias;
+    private int dMax;
+    private int dMin;
+
     public BusquedaTabu(Coordenada[] coordenadas, ArrayList<Integer> solucionInicial) {
         this.coordenadas = coordenadas;
         this.solucionInicial = solucionInicial;
-        this.listaTabu = new ArrayList<>();
         this.solucionActual = solucionInicial;
+        this.listaTabu = new ArrayList<>();
+        this.distancias = new int[coordenadas.length][coordenadas.length];
+        this.frecuencias = new int[coordenadas.length][coordenadas.length];
+        this.nuevasDistancias = new int[coordenadas.length][coordenadas.length];
+        this.mejorSolucion = new ArrayList<>();
+        this.dMax = 0;
+        this.dMin = Integer.MAX_VALUE;
         this.calcularDistancias();
         this.costeSolucionActual = this.calcularCosteSolucionActual(this.solucionInicial);
     }
 
     public BusquedaTabu(Coordenada[] coordenadas) {
+        this.dMax = 0;
+        this.dMin = Integer.MAX_VALUE;
         this.coordenadas = coordenadas;
-        listaTabu = new ArrayList<>();
+        this.listaTabu = new ArrayList<>();
         this.solucionInicial = new ArrayList<>();
+        this.mejorSolucion = new ArrayList<>();
+        this.distancias = new int[coordenadas.length][coordenadas.length];
+        this.frecuencias = new int[coordenadas.length][coordenadas.length];
+        this.nuevasDistancias = new int[coordenadas.length][coordenadas.length];
+        this.calcularDistancias();
+        this.calcularSolucionVorazInicial();
+        solucionActual = solucionInicial;
+        this.costeSolucionActual = this.calcularCosteSolucionActual(this.solucionActual);
+    }
+    private void calcularSolucionVorazInicial(){
         //Generar solucion inicial greedy cogiendo la siguiente ciudad que esté más cerca
         int indexCoordenadaMin = 0;
         int distanciaMin = Integer.MAX_VALUE;
@@ -32,34 +57,88 @@ public class BusquedaTabu {
         for(int k = 1; k < coordenadas.length; k++){
             for(int i = 0; i < coordenadas.length; i++){
                 if(!ciudadesRecorridas.contains(i)){
-                    distanciaActual = (int)this.coordenadas[ciudadActual].distancia(this.coordenadas[i]);
-                    /*if(k == 33){
-                        System.out.println("Distancia "+ciudadActual+" a " +i+": "+distanciaActual);
-                    }*/
+                    distanciaActual = distancias[ciudadActual][i];
                     if(distanciaActual < distanciaMin){
                         distanciaMin = distanciaActual;
                         indexCoordenadaMin = i;
                     }
                 }
             }
-            solucionInicial.add(indexCoordenadaMin);
+            this.solucionInicial.add(indexCoordenadaMin);
             ciudadesRecorridas.add(indexCoordenadaMin);
             distanciaMin = Integer.MAX_VALUE;
             ciudadActual = indexCoordenadaMin;
         }
-
-        solucionActual = solucionInicial;
-        this.calcularDistancias();
-        this.costeSolucionActual = this.calcularCosteSolucionActual(this.solucionActual);
     }
+    private void calcularSolucionVoraz(){
+        //Generar solucion actual greedy cogiendo la siguiente ciudad que esté más cerca con la matriz de nuevas distancias
+        int indexCoordenadaMin = 0;
+        int distanciaMin = Integer.MAX_VALUE;
+        int distanciaActual;
+        int ciudadActual = 0;
+        ArrayList<Integer> ciudadesRecorridas = new ArrayList<>();
 
+        ciudadesRecorridas.add(0);
+        for(int k = 1; k < coordenadas.length; k++){
+            for(int i = 0; i < coordenadas.length; i++){
+                if(!ciudadesRecorridas.contains(i)){
+                    distanciaActual = nuevasDistancias[ciudadActual][i];
+                    if(distanciaActual < distanciaMin){
+                        distanciaMin = distanciaActual;
+                        indexCoordenadaMin = i;
+                    }
+                }
+            }
+            this.solucionActual.add(indexCoordenadaMin);
+            ciudadesRecorridas.add(indexCoordenadaMin);
+            distanciaMin = Integer.MAX_VALUE;
+            ciudadActual = indexCoordenadaMin;
+        }
+    }
     public void calcularDistancias(){
-        this.distancias = new int[coordenadas.length][coordenadas.length];
+        int currentMin = 0, currentMax = 0;
 
         for(int i = 0; i < coordenadas.length; i++){
             for(int j = 0; j < coordenadas.length; j++){
                 this.distancias[i][j] = (int)coordenadas[i].distancia(coordenadas[j]);
+                currentMin = this.distancias[i][j];
+                currentMax = this.distancias[i][j];
+                if(currentMax > dMax){
+                    dMax = currentMax;
+                }
+                if(currentMin < dMin && i != j){
+                    dMin = currentMin;
+                }
             }
+        }
+    }
+
+    private int maxFrecuencia(){
+        int maxFrecuencia = 0, currentFrec;
+        for(int i = 0; i < coordenadas.length; i++){
+            for(int j = 0; j < coordenadas.length; j++){
+                currentFrec = this.frecuencias[i][j];
+                if(currentFrec > maxFrecuencia){
+                    maxFrecuencia = currentFrec;
+                }
+            }
+        }
+        return maxFrecuencia;
+    }
+
+    private void calcularNuevasDistancias(){
+        double mu = 1;
+
+        for(int i = 0; i < coordenadas.length; i++){
+            for(int j = 0; j < coordenadas.length; j++){
+                nuevasDistancias[i][j] = distancias[i][j] + (int)mu*(this.dMax - this.dMin)*(frecuencias[i][j]/this.maxFrecuencia());
+            }
+        }
+    }
+
+    private void actualizarFrecuencias(ArrayList<Integer> mejor){
+        for(int i = 0; i < mejor.size() - 1; i++){
+            frecuencias[mejor.get(i)][mejor.get(i+1)]++;
         }
     }
 
@@ -89,7 +168,6 @@ public class BusquedaTabu {
             while (j < coordenadas.length - 1) {
                 while (j > k) {
                     Movimiento mov = new Movimiento(j, k);
-                    //Si está en la lista tabú seguimos iterando
                     if (listaTabu.contains(mov)) {
                         ++k;
                         continue;
@@ -138,10 +216,13 @@ public class BusquedaTabu {
             ultimoMejor.clear();
             ultimoMejor.addAll(mejorVecino);
             insertarEnTabu(mejorIntercambio);
+            actualizarFrecuencias(mejorVecino);
             if (costeMejorVecino < costeSolucionActual) {
-                solucionActual.clear();
-                solucionActual.addAll(mejorVecino);
-                costeSolucionActual = costeMejorVecino;
+                this.solucionActual.clear();
+                this.solucionActual.addAll(mejorVecino);
+                this.costeSolucionActual = costeMejorVecino;
+                this.mejorSolucion.clear();
+                this.mejorSolucion.addAll(mejorVecino);
                 iteracionMejor = iter;
                 mejora = true;
                 noMejora = 0;
@@ -152,11 +233,20 @@ public class BusquedaTabu {
             this.imprimirSolucionActual(mejorVecino, iter, costeMejorVecino, noMejora, mejorIntercambio);
             if (noMejora == 100) {
                 reinicio++;
+                solucionActual.clear();
+                this.calcularNuevasDistancias();
+                this.calcularSolucionVoraz();
+                System.out.print("\tRECORRIDO: ");
+
+                for (int i = 0; i < solucionActual.size(); i++) {
+                    System.out.print(solucionActual.get(i) + " ");
+                }
+                frecuencias = new int[coordenadas.length][coordenadas.length];
                 System.out.println("\n***************");
                 System.out.println("REINICIO: " + reinicio);
                 System.out.println("***************");
-                listaTabu.clear();
                 noMejora = 0;
+                listaTabu.clear();
                 ultimoMejor.clear();
                 mejora = true;
             }
@@ -166,11 +256,11 @@ public class BusquedaTabu {
         System.out.println("\nMEJOR SOLUCION:");
         System.out.print("\tRECORRIDO: ");
 
-        for (int i = 0; i < solucionActual.size(); i++) {
-            System.out.print(solucionActual.get(i) + " ");
+        for (int i = 0; i < mejorSolucion.size(); i++) {
+            System.out.print(mejorSolucion.get(i) + " ");
         }
 
-        System.out.println("\n\tCOSTE (km): " + this.costeSolucionActual);
+        System.out.println("\n\tCOSTE (km): " + this.calcularCosteSolucionActual(mejorSolucion));
         System.out.println("\tITERACION: " + iteracionMejor);
     }
 
@@ -185,7 +275,7 @@ public class BusquedaTabu {
         int coste = this.distancias[0][solucion.get(0)];
 
         for (int i = 0; i < (solucion.size() - 1); i++) {
-            coste += (int) distancias[solucion.get(i)][solucion.get(i + 1)];
+            coste += distancias[solucion.get(i)][solucion.get(i + 1)];
         }
         coste += distancias[solucion.get(solucion.size() - 1)][0];
         return coste;
